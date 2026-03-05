@@ -39,14 +39,14 @@ export default function FeedPage() {
 
     setIsSeeding(true);
     
-    // Iterate through sample blogs and initiate non-blocking writes
+    // Iterate through sample blogs and initiate non-blocking writes to BOTH locations
     SAMPLE_BLOGS.forEach((blog) => {
       const blogId = Math.random().toString(36).substr(2, 9);
-      const docRef = doc(db, 'public_blogs', blogId);
+      
       const blogData = {
         ...blog,
         id: blogId,
-        userId: user.uid, // Use current user UID to satisfy security rules
+        userId: user.uid,
         updatedAt: blog.createdAt,
         author: {
           id: user.uid,
@@ -55,10 +55,24 @@ export default function FeedPage() {
         }
       };
 
-      setDoc(docRef, blogData)
-        .catch(async (error) => {
+      // 1. Write to private dashboard
+      const privateDocRef = doc(db, 'users', user.uid, 'blogs', blogId);
+      setDoc(privateDocRef, blogData)
+        .catch(async () => {
           const permissionError = new FirestorePermissionError({
-            path: docRef.path,
+            path: privateDocRef.path,
+            operation: 'create',
+            requestResourceData: blogData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
+
+      // 2. Write to public feed
+      const publicDocRef = doc(db, 'public_blogs', blogId);
+      setDoc(publicDocRef, blogData)
+        .catch(async () => {
+          const permissionError = new FirestorePermissionError({
+            path: publicDocRef.path,
             operation: 'create',
             requestResourceData: blogData,
           });
@@ -68,10 +82,9 @@ export default function FeedPage() {
 
     toast({
       title: "Seeding initiated",
-      description: "Sample blog posts are being added to the public feed.",
+      description: "Sample blog posts are being added to your dashboard and the public feed.",
     });
     
-    // We stop the spinner immediately as writes are non-blocking and optimistically updated
     setIsSeeding(false);
   }
 

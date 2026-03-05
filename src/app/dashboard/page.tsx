@@ -1,16 +1,16 @@
-
 'use client';
 
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy } from 'firebase/firestore';
+import { useUser, useFirestore, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { collection, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit2, Trash2, Eye, Loader2, Calendar, LayoutGrid, ArrowRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, Loader2, Calendar, LayoutGrid, ArrowRight, MessageSquare, Heart } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
+import { toast } from '@/hooks/use-toast';
 
 export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
@@ -29,6 +29,36 @@ export default function DashboardPage() {
   }, [db, user]);
 
   const { data: userBlogs, isLoading: isBlogsLoading } = useCollection(userBlogsQuery);
+
+  const handleDelete = (blogId: string) => {
+    if (!user) return;
+    
+    const blogRef = doc(db, 'users', user.uid, 'blogs', blogId);
+    const publicRef = doc(db, 'public_blogs', blogId);
+
+    // Non-blocking delete from user collection
+    deleteDoc(blogRef).catch(async () => {
+      const permissionError = new FirestorePermissionError({
+        path: blogRef.path,
+        operation: 'delete',
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    });
+
+    // Non-blocking delete from public collection
+    deleteDoc(publicRef).catch(async () => {
+      const permissionError = new FirestorePermissionError({
+        path: publicRef.path,
+        operation: 'delete',
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    });
+
+    toast({
+      title: "Story deleted",
+      description: "The story has been removed from your dashboard and the public feed.",
+    });
+  };
 
   if (isUserLoading) {
     return (
@@ -49,12 +79,12 @@ export default function DashboardPage() {
               <LayoutGrid className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-3xl font-headline font-bold">Welcome, {user.displayName || 'Writer'}</h1>
+              <h1 className="text-3xl font-headline font-bold" suppressHydrationWarning>Welcome, {user.displayName || 'Writer'}</h1>
               <p className="text-muted-foreground">Manage your creative stories and drafts from one place.</p>
             </div>
           </div>
           <Link href="/dashboard/new">
-            <Button size="lg" className="h-12 px-6 gap-2 rounded-full shadow-lg shadow-primary/20">
+            <Button size="lg" className="h-12 px-6 gap-2 rounded-full shadow-lg shadow-primary/20" suppressHydrationWarning>
               <Plus className="w-5 h-5" /> New Story
             </Button>
           </Link>
@@ -63,11 +93,11 @@ export default function DashboardPage() {
         <div className="grid gap-6">
           <div className="flex items-center justify-between px-2">
             <h2 className="text-lg font-bold font-headline flex items-center gap-2">
-              Recent Stories
-              <Badge variant="secondary" className="rounded-full px-2">{userBlogs?.length || 0}</Badge>
+              Your Stories
+              <Badge variant="secondary" className="rounded-full px-2" suppressHydrationWarning>{userBlogs?.length || 0}</Badge>
             </h2>
             <Link href="/feed" className="text-sm text-primary hover:underline flex items-center gap-1">
-              View Feed <ArrowRight className="w-3.5 h-3.5" />
+              View Public Feed <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
 
@@ -78,7 +108,7 @@ export default function DashboardPage() {
           ) : userBlogs && userBlogs.length > 0 ? (
             <div className="grid gap-4">
               {userBlogs.map((blog) => (
-                <BlogRow key={blog.id} blog={blog} />
+                <BlogRow key={blog.id} blog={blog} onDelete={() => handleDelete(blog.id)} />
               ))}
             </div>
           ) : (
@@ -89,7 +119,7 @@ export default function DashboardPage() {
               <h3 className="text-2xl font-headline font-bold mb-2">No stories yet</h3>
               <p className="text-muted-foreground mb-8 max-w-xs mx-auto">Your creative journey starts here. Write your first masterpiece and share it with the world.</p>
               <Link href="/dashboard/new">
-                <Button variant="outline" className="gap-2 rounded-full h-12 px-6">
+                <Button variant="outline" className="gap-2 rounded-full h-12 px-6" suppressHydrationWarning>
                   <Plus className="w-5 h-5" /> Write Your First Story
                 </Button>
               </Link>
@@ -101,7 +131,7 @@ export default function DashboardPage() {
   );
 }
 
-function BlogRow({ blog }: { blog: any }) {
+function BlogRow({ blog, onDelete }: { blog: any, onDelete: () => void }) {
   const [formattedDate, setFormattedDate] = useState<string>('');
 
   useEffect(() => {
@@ -119,10 +149,14 @@ function BlogRow({ blog }: { blog: any }) {
           ) : (
             <Badge variant="outline" className="px-3 py-1">Draft</Badge>
           )}
-          <span className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium">
+          <span className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium" suppressHydrationWarning>
             <Calendar className="w-3 h-3" />
             {formattedDate || '...'}
           </span>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground ml-2 opacity-60">
+             <span className="flex items-center gap-1"><Heart className="w-3 h-3" /> {blog.likeCount || 0}</span>
+             <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" /> {blog.commentCount || 0}</span>
+          </div>
         </div>
         <h3 className="text-xl font-bold font-headline truncate mb-2 group-hover:text-primary transition-colors">{blog.title}</h3>
         <p className="text-muted-foreground text-sm line-clamp-1 leading-relaxed">
@@ -133,15 +167,22 @@ function BlogRow({ blog }: { blog: any }) {
       <div className="flex items-center gap-3 shrink-0">
         {blog.isPublished && (
           <Link href={`/blog/${blog.slug}`}>
-            <Button variant="outline" size="icon" className="rounded-full h-11 w-11 hover:bg-primary/5 hover:text-primary border-muted transition-colors" title="View Publicly">
+            <Button variant="outline" size="icon" className="rounded-full h-11 w-11 hover:bg-primary/5 hover:text-primary border-muted transition-colors" title="View Publicly" suppressHydrationWarning>
               <Eye className="w-4 h-4" />
             </Button>
           </Link>
         )}
-        <Button variant="outline" size="icon" className="rounded-full h-11 w-11 hover:bg-primary/5 hover:text-primary border-muted transition-colors" title="Edit Story">
+        <Button variant="outline" size="icon" className="rounded-full h-11 w-11 hover:bg-primary/5 hover:text-primary border-muted transition-colors" title="Edit Story" suppressHydrationWarning>
           <Edit2 className="w-4 h-4" />
         </Button>
-        <Button variant="outline" size="icon" className="rounded-full h-11 w-11 text-destructive hover:bg-destructive/5 hover:text-destructive border-muted transition-colors" title="Delete Story">
+        <Button 
+          variant="outline" 
+          size="icon" 
+          className="rounded-full h-11 w-11 text-destructive hover:bg-destructive/5 hover:text-destructive border-muted transition-colors" 
+          title="Delete Story"
+          onClick={onDelete}
+          suppressHydrationWarning
+        >
           <Trash2 className="w-4 h-4" />
         </Button>
       </div>
