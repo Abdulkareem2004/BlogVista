@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,10 +8,13 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Heart, MessageSquare, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 export function BlogCard({ blog }: { blog: any }) {
   const [formattedDate, setFormattedDate] = useState<string | null>(null);
-  const imageUrl = `https://picsum.photos/seed/${blog.id || blog.slug}/800/400`;
+  
+  const cardPlaceholder = PlaceHolderImages.find(img => img.id === 'blog-card');
+  const imageUrl = cardPlaceholder?.imageUrl.replace('/seed/card/', `/seed/${blog.id || blog.slug}/`);
 
   useEffect(() => {
     if (blog.createdAt) {
@@ -22,20 +26,21 @@ export function BlogCard({ blog }: { blog: any }) {
     }
   }, [blog.createdAt]);
 
-  // Handle both object-style author and string-style author
   const authorName = typeof blog.author === 'object' ? blog.author.name : (blog.author || 'Anonymous');
 
   return (
     <Link href={`/blog/${blog.slug}`}>
       <Card className="group overflow-hidden hover:shadow-xl transition-all duration-300 border-none shadow-sm bg-card/50">
         <div className="aspect-[2/1] relative overflow-hidden">
-          <Image 
-            src={imageUrl} 
-            alt={blog.title} 
-            fill 
-            className="object-cover group-hover:scale-105 transition-transform duration-500"
-            data-ai-hint="blog image"
-          />
+          {imageUrl && (
+            <Image 
+              src={imageUrl} 
+              alt={blog.title} 
+              fill 
+              className="object-cover group-hover:scale-105 transition-transform duration-500"
+              data-ai-hint={cardPlaceholder?.imageHint}
+            />
+          )}
           <div className="absolute top-4 right-4">
             <Badge className="bg-background/80 backdrop-blur text-foreground border-none px-3 py-1">
               {authorName}
