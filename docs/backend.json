@@ -1,0 +1,256 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the BlogVista platform, primarily for authentication and authorship of blog content.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "The unique email address of the user.",
+          "format": "email"
+        },
+        "passwordHash": {
+          "type": "string",
+          "description": "The securely hashed password for user authentication, managed by the authentication system."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the user account was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "passwordHash",
+        "createdAt"
+      ]
+    },
+    "Blog": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Blog",
+      "type": "object",
+      "description": "Represents a blog post created by a user, including its content, publication status, and an optional AI-generated summary.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Blog entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who authored this blog post. (Relationship: User 1:N Blog)"
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the blog post."
+        },
+        "slug": {
+          "type": "string",
+          "description": "A unique, URL-friendly identifier for the blog post, typically derived from its title."
+        },
+        "content": {
+          "type": "string",
+          "description": "The main rich-text content of the blog post."
+        },
+        "summary": {
+          "type": "string",
+          "description": "A concise, AI-generated summary of the blog post content. This field is optional."
+        },
+        "isPublished": {
+          "type": "boolean",
+          "description": "A flag indicating whether the blog post is publicly visible."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the blog post was originally created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the blog post was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "title",
+        "slug",
+        "content",
+        "isPublished",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Like": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Like",
+      "type": "object",
+      "description": "Records an authenticated user's 'like' on a specific blog post. A unique constraint ensures a user can like a post only once.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Like entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who performed the like. (Relationship: User 1:N Like)"
+        },
+        "blogId": {
+          "type": "string",
+          "description": "Reference to the Blog post that received the like. (Relationship: Blog 1:N Like)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the like was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "blogId",
+        "createdAt"
+      ]
+    },
+    "Comment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Comment",
+      "type": "object",
+      "description": "Represents a user-generated comment on a specific blog post.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Comment entity."
+        },
+        "blogId": {
+          "type": "string",
+          "description": "Reference to the Blog post this comment is associated with. (Relationship: Blog 1:N Comment)"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who authored this comment. (Relationship: User 1:N Comment)"
+        },
+        "content": {
+          "type": "string",
+          "description": "The textual content of the comment."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the comment was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "blogId",
+        "userId",
+        "content",
+        "createdAt"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Root collection for user profiles. Each document ID (`userId`) corresponds to the Firebase Authentication UID. This path facilitates path-based ownership for secure access to user-specific data."
+        }
+      },
+      {
+        "path": "/users/{userId}/blogs/{blogId}",
+        "definition": {
+          "entityName": "Blog",
+          "schema": {
+            "$ref": "#/backend/entities/Blog"
+          },
+          "description": "Subcollection storing all blog posts, including drafts, owned by a specific user. The `{userId}` wildcard ensures ownership is tied directly to the authenticated user. This supports private dashboard operations (create, edit, delete). Includes `userId` as an explicit owner reference.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who owns these blogs, matching `request.auth.uid`."
+            },
+            {
+              "name": "blogId",
+              "description": "The unique identifier for a specific blog post."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/public_blogs/{blogId}",
+        "definition": {
+          "entityName": "Blog",
+          "schema": {
+            "$ref": "#/backend/entities/Blog"
+          },
+          "description": "Top-level collection containing only *published* blog posts. This collection is a denormalized view used for the public feed and public blog access, ensuring all documents are public-readable without filtering in security rules. Backend services (e.g., Cloud Functions) are responsible for synchronizing data from `/users/{userId}/blogs/{blogId}` when `isPublished` changes. Includes denormalized `userId` (author ID), and optionally denormalized `likeCount` and `commentCount` (not in schema, but required for feed).",
+          "params": [
+            {
+              "name": "blogId",
+              "description": "The unique identifier for a published blog post."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/public_blogs/{blogId}/likes/{likerUserId}",
+        "definition": {
+          "entityName": "Like",
+          "schema": {
+            "$ref": "#/backend/entities/Like"
+          },
+          "description": "Subcollection recording a 'like' on a published blog post. The document ID (`likerUserId`) is set to the liking user's UID to enforce a unique constraint (one like per user per blog). Includes denormalized 'userId' (the liker's ID) for rule clarity, and 'blogId' is implied by the parent path.",
+          "params": [
+            {
+              "name": "blogId",
+              "description": "The unique identifier of the published blog post being liked."
+            },
+            {
+              "name": "likerUserId",
+              "description": "The unique identifier of the user who liked the blog, used as the document ID."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/public_blogs/{blogId}/comments/{commentId}",
+        "definition": {
+          "entityName": "Comment",
+          "schema": {
+            "$ref": "#/backend/entities/Comment"
+          },
+          "description": "Subcollection storing comments for a published blog post. Includes `userId` (the commenter's ID) for authorization checks (e.g., for deletion) and `blogId` is implied by the parent path. Comments are sorted by `createdAt`.",
+          "params": [
+            {
+              "name": "blogId",
+              "description": "The unique identifier of the published blog post receiving the comment."
+            },
+            {
+              "name": "commentId",
+              "description": "The unique identifier for a specific comment."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to meet the core principles of Authorization Independence, Structural Segregation, and QAPs (Queries Are Not Filters), ensuring a secure, scalable, and debuggable blog platform. \n\n**Authorization Independence:**\n1.  **User Profiles (`/users/{userId}`):** Authorization for user profiles relies directly on `request.auth.uid` matching the `{userId}` wildcard in the path, ensuring that users can only access their own profile data. This eliminates any need for `get()` calls in security rules to determine ownership.\n2.  **Private Blog Management (`/users/{userId}/blogs/{blogId}`):** Similarly, blog posts within a user's private dashboard are secured by ensuring `request.auth.uid` matches `{userId}` in the path. Furthermore, the `userId` field is explicitly stored within each blog document, allowing for robust rules like `allow write: if request.auth.uid == userId;` without resorting to `get()` calls on parent documents or other collections. This means an owner can atomically create or update their blog without checking their user status from another document.\n3.  **Likes (`/public_blogs/{blogId}/likes/{likerUserId}`):** The unique document ID for a 'like' is the `likerUserId` (i.e., `request.auth.uid`). This design inherently prevents duplicate likes by the same user on the same blog and allows rules to check `request.auth.uid == likerUserId` without any `get()` operations.\n4.  **Comments (`/public_blogs/{blogId}/comments/{commentId}`):** Comments include the `userId` of the author. For operations like deleting a comment, the rule can directly compare `request.auth.uid == resource.data.userId`, again avoiding `get()` calls.\n\n**Structural Segregation & QAPs (Queries Are Not Filters):**\n1.  **Public vs. Private Blogs:** The most critical aspect for QAPs is the clear segregation of blog data. \n    *   `/users/{userId}/blogs/{blogId}`: This collection stores all of a user's blogs, including drafts. Access is strictly controlled by the owner. This ensures that a query for a user's blogs (`db.collection('users').doc(userId).collection('blogs')`) will only return their own content, and security rules will not filter out unauthorized documents.\n    *   `/public_blogs/{blogId}`: This is a dedicated, denormalized collection that contains *only published* blog posts. When a blog is published or unpublished from `/users/{userId}/blogs/{blogId}`, a backend process (e.g., Cloud Function) syncs the data to/from this collection. This crucial segregation allows for an extremely simple and performant security rule: `allow read: true;` on this collection, as every document within it is guaranteed to be public. This completely satisfies the QAP for the 'Public Feed' (`GET /public/feed`) and 'Public Blog Access' (`GET /public/blogs/:slug`) endpoints, as client-side queries can fetch directly without any security rule filtering.\n2.  **Likes and Comments for Public Blogs:** `likes` and `comments` are placed as subcollections under `/public_blogs/{blogId}`. This ensures that likes and comments are only associated with publicly visible blogs, and allows for efficient `list` operations for a specific blog's likes or comments without security rules needing to verify the parent blog's status. For example, `db.collection('public_blogs').doc(blogId).collection('comments')` will securely retrieve all comments for that blog.\n\n**Denormalization for Performance and Security:**\n*   The `public_blogs` collection denormalizes blog data for efficient public access. It implicitly ensures `isPublished: true` for all documents within it (enforced by backend logic). This collection would also include denormalized `userId` (author's ID) and potentially denormalized `likeCount` and `commentCount` to support the 'Public Feed' requirements efficiently without needing to aggregate data at query time or perform `get()` calls in rules. While `likeCount` and `commentCount` are not explicitly in the `Blog` schema, they are critical for the 'Public Feed' and represent a best practice for denormalization in this context."
+  }
+}

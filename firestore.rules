@@ -1,0 +1,118 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * BlogVista Security Rules Documentation
+     *
+     * Core Philosophy:
+     * This ruleset implements a strict user-ownership model combined with structural segregation 
+     * to balance private dashboard management and a high-performance public feed. 
+     * Security decisions are "Authorization Independent," meaning they rely on data present 
+     * in the request or path, avoiding costly get() lookups.
+     *
+     * Data Structure:
+     * - /users/{userId}: Private user profiles and metadata.
+     * - /users/{userId}/blogs/{blogId}: Private management area for a user's own blog posts (drafts & published).
+     * - /public_blogs/{blogId}: A denormalized, read-optimized collection for the public feed.
+     * - /public_blogs/{blogId}/likes & /comments: Public engagement subcollections.
+     *
+     * Key Security Decisions:
+     * - Ownership via Path: Access to /users/{userId} and its subcollections is restricted 
+     *   by matching the {userId} wildcard to the authenticated UID.
+     * - Public Segregation: Data in /public_blogs is public-readable by design, satisfying 
+     *   the "Queries Are Not Filters" principle.
+     * - Denormalization for Authorization: Essential fields like 'userId' are required on 
+     *   all documents to facilitate fast ownership checks without cross-document reads.
+     */
+
+    // --- Helper Functions ---
+
+    /** Checks if the request is from an authenticated user. */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /** Checks if the authenticated user's UID matches the provided userId. */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /** Checks if the document exists and the current user is the owner based on a field. */
+    function isExistingOwner(ownerId) {
+      return resource != null && isOwner(ownerId);
+    }
+
+    // --- Collection Rules ---
+
+    /**
+     * @description Rules for user profile documents. Ensures users can only manage their own profile.
+     * @path /users/{userId}
+     * @allow (create) if auth.uid matches userId.
+     * @deny (get) if auth.uid does not match userId.
+     * @principle Enforces strict self-ownership for root user documents.
+     */
+    match /users/{userId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+
+      /**
+       * @description Private dashboard for blogs. Restricted to the user who owns the content.
+       * @path /users/{userId}/blogs/{blogId}
+       * @allow (list) for the owner to view their private dashboard.
+       * @deny (update) if the owner tries to change the document's userId field.
+       * @principle Path-based ownership coupled with internal field immutability.
+       */
+      match /blogs/{blogId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+    }
+
+    /**
+     * @description Publicly accessible blog feed. Reads are open, writes are restricted to authors.
+     * @path /public_blogs/{blogId}
+     * @allow (list) for any user (including anonymous) to view the feed.
+     * @deny (create) if the provided userId does not match the authenticated user.
+     * @principle Public Read with Owner-Only Writes.
+     */
+    match /public_blogs/{blogId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isExistingOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(resource.data.userId);
+
+      /**
+       * @description Engagement metric: Likes. Uses the user's UID as the document ID for uniqueness.
+       * @path /public_blogs/{blogId}/likes/{likerUserId}
+       * @allow (create) if the document ID matches the auth UID.
+       * @deny (delete) if someone else tries to remove a user's like.
+       * @principle Unique constraint via Document ID and ownership validation.
+       */
+      match /likes/{likerUserId} {
+        allow get, list: if true;
+        allow create: if isOwner(likerUserId) && request.resource.data.userId == likerUserId;
+        allow update: if isExistingOwner(likerUserId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(likerUserId);
+      }
+
+      /**
+       * @description Public comments on blog posts.
+       * @path /public_blogs/{blogId}/comments/{commentId}
+       * @allow (get) for public reading.
+       * @deny (update) if a user tries to edit someone else's comment.
+       * @principle Author-based write protection for public subcollections.
+       */
+      match /comments/{commentId} {
+        allow get, list: if true;
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow update: if isExistingOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(resource.data.userId);
+      }
+    }
+  }
+}
