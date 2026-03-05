@@ -1,16 +1,19 @@
-
 'use client';
 
-import { collection, query, orderBy } from 'firebase/firestore';
+import { collection, query, orderBy, doc, setDoc } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { BlogCard } from '@/components/blog/BlogCard';
 import { Input } from '@/components/ui/input';
-import { Search, Loader2, Newspaper, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Search, Loader2, Newspaper, Sparkles, Database } from 'lucide-react';
 import { useState } from 'react';
+import { SAMPLE_BLOGS } from '@/lib/seed-data';
+import { toast } from '@/hooks/use-toast';
 
 export default function FeedPage() {
   const db = useFirestore();
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSeeding, setIsSeeding] = useState(false);
 
   const blogsQuery = useMemoFirebase(() => {
     return query(collection(db, 'public_blogs'), orderBy('createdAt', 'desc'));
@@ -22,6 +25,33 @@ export default function FeedPage() {
     blog.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     blog.summary?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  async function handleSeedData() {
+    setIsSeeding(true);
+    try {
+      for (const blog of SAMPLE_BLOGS) {
+        const blogId = Math.random().toString(36).substr(2, 9);
+        await setDoc(doc(db, 'public_blogs', blogId), {
+          ...blog,
+          id: blogId,
+          userId: 'system',
+          updatedAt: blog.createdAt,
+        });
+      }
+      toast({
+        title: "Feed Seeded!",
+        description: "Sample blog posts have been added to the public feed.",
+      });
+    } catch (e: any) {
+      toast({
+        variant: "destructive",
+        title: "Seeding failed",
+        description: e.message,
+      });
+    } finally {
+      setIsSeeding(false);
+    }
+  }
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -46,6 +76,7 @@ export default function FeedPage() {
               className="pl-10 bg-card border-none shadow-sm h-12 rounded-full"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              suppressHydrationWarning
             />
           </div>
         </header>
@@ -61,9 +92,20 @@ export default function FeedPage() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-24 bg-card/50 rounded-3xl border-2 border-dashed border-muted">
+          <div className="text-center py-24 bg-card/50 rounded-3xl border-2 border-dashed border-muted flex flex-col items-center">
+            <Database className="w-12 h-12 text-muted-foreground mb-4 opacity-20" />
             <h3 className="text-2xl font-bold font-headline mb-2 text-muted-foreground">No stories found</h3>
-            <p className="text-muted-foreground max-w-sm mx-auto">Try a different search term or check back later for new updates from our writers.</p>
+            <p className="text-muted-foreground max-w-sm mx-auto mb-8">
+              The public feed is currently empty. You can seed it with sample data to see how it looks.
+            </p>
+            <Button 
+              onClick={handleSeedData} 
+              disabled={isSeeding}
+              className="rounded-full gap-2 px-8 h-12 shadow-lg shadow-primary/20"
+            >
+              {isSeeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+              Seed Sample Feed
+            </Button>
           </div>
         )}
       </div>
