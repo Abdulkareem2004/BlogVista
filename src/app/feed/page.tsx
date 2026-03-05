@@ -102,6 +102,7 @@ export default function FeedPage() {
               onClick={handleSeedData} 
               disabled={isSeeding}
               className="rounded-full gap-2 px-8 h-12 shadow-lg shadow-primary/20"
+              suppressHydrationWarning
             >
               {isSeeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
               Seed Sample Feed
