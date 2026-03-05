@@ -29,7 +29,10 @@ export default function RootLayout({
           </main>
           <Toaster />
           <footer className="border-t bg-card py-8 mt-auto">
-            <div className="container mx-auto px-4 text-center text-muted-foreground text-sm">
+            <div 
+              className="container mx-auto px-4 text-center text-muted-foreground text-sm"
+              suppressHydrationWarning
+            >
               © {new Date().getFullYear()} BlogVista. All rights reserved.
             </div>
           </footer>
