@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit2, Trash2, Eye, Loader2, Calendar } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, Loader2, Calendar, LayoutGrid } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
@@ -29,7 +29,7 @@ export default function DashboardPage() {
 
   const { data: userBlogs, isLoading: isBlogsLoading } = useCollection(userBlogsQuery);
 
-  if (isUserLoading || !user) {
+  if (isUserLoading) {
     return (
       <div className="container mx-auto px-4 py-20 flex justify-center">
         <Loader2 className="w-10 h-10 animate-spin text-primary opacity-50" />
@@ -37,17 +37,24 @@ export default function DashboardPage() {
     );
   }
 
+  if (!user) return null;
+
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-5xl mx-auto">
         <header className="flex flex-col sm:flex-row items-center justify-between gap-6 mb-12 bg-card p-8 rounded-3xl shadow-sm border border-border/50">
-          <div>
-            <h1 className="text-4xl font-headline font-bold mb-2">Writer's Hub</h1>
-            <p className="text-muted-foreground">Welcome back, {user.displayName || 'Writer'}. Manage your creative pieces here.</p>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+              <LayoutGrid className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-headline font-bold">Writer Dashboard</h1>
+              <p className="text-muted-foreground">Manage your creative stories and drafts.</p>
+            </div>
           </div>
           <Link href="/dashboard/new">
-            <Button size="lg" className="h-14 px-8 gap-2 rounded-full shadow-lg shadow-primary/20">
-              <Plus className="w-5 h-5" /> Create New Story
+            <Button size="lg" className="h-12 px-6 gap-2 rounded-full shadow-lg shadow-primary/20">
+              <Plus className="w-5 h-5" /> New Story
             </Button>
           </Link>
         </header>
@@ -66,8 +73,8 @@ export default function DashboardPage() {
               <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-6">
                 <Plus className="w-8 h-8 text-muted-foreground" />
               </div>
-              <h3 className="text-2xl font-headline font-bold mb-2">Your shelf is empty</h3>
-              <p className="text-muted-foreground mb-8 max-w-xs mx-auto">Start your writing journey today and share your unique perspective with the world.</p>
+              <h3 className="text-2xl font-headline font-bold mb-2">No stories yet</h3>
+              <p className="text-muted-foreground mb-8 max-w-xs mx-auto">Your creative journey starts here. Write your first masterpiece.</p>
               <Link href="/dashboard/new">
                 <Button variant="outline" className="gap-2 rounded-full h-12 px-6">
                   <Plus className="w-5 h-5" /> Write Your First Story
@@ -109,11 +116,13 @@ function BlogRow({ blog }: { blog: any }) {
       </div>
       
       <div className="flex items-center gap-3 shrink-0">
-        <Link href={`/blog/${blog.slug}`}>
-          <Button variant="outline" size="icon" className="rounded-full h-11 w-11 hover:bg-primary/5 hover:text-primary border-muted transition-colors" title="View Story">
-            <Eye className="w-4 h-4" />
-          </Button>
-        </Link>
+        {blog.isPublished && (
+          <Link href={`/blog/${blog.slug}`}>
+            <Button variant="outline" size="icon" className="rounded-full h-11 w-11 hover:bg-primary/5 hover:text-primary border-muted transition-colors" title="View Publicly">
+              <Eye className="w-4 h-4" />
+            </Button>
+          </Link>
+        )}
         <Button variant="outline" size="icon" className="rounded-full h-11 w-11 hover:bg-primary/5 hover:text-primary border-muted transition-colors" title="Edit Story">
           <Edit2 className="w-4 h-4" />
         </Button>
