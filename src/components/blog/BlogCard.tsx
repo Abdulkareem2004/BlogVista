@@ -1,6 +1,7 @@
 
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Blog } from '@/lib/types';
@@ -10,7 +11,13 @@ import { Heart, MessageSquare, Clock, User } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 export function BlogCard({ blog }: { blog: Blog }) {
+  const [formattedDate, setFormattedDate] = useState<string | null>(null);
   const imageUrl = `https://picsum.photos/seed/${blog.id}/800/400`;
+
+  useEffect(() => {
+    // Calculate distance to now only after mounting on the client
+    setFormattedDate(formatDistanceToNow(new Date(blog.createdAt)));
+  }, [blog.createdAt]);
 
   return (
     <Link href={`/blog/${blog.slug}`}>
@@ -52,7 +59,7 @@ export function BlogCard({ blog }: { blog: Blog }) {
           </div>
           <div className="flex items-center gap-1.5">
             <Clock className="w-3 h-3" />
-            {formatDistanceToNow(new Date(blog.createdAt))} ago
+            {formattedDate ? `${formattedDate} ago` : 'Loading...'}
           </div>
         </CardContent>
       </Card>
