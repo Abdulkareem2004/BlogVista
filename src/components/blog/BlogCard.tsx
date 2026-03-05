@@ -4,20 +4,26 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Blog } from '@/lib/types';
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Heart, MessageSquare, Clock, User } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
-export function BlogCard({ blog }: { blog: Blog }) {
+export function BlogCard({ blog }: { blog: any }) {
   const [formattedDate, setFormattedDate] = useState<string | null>(null);
-  const imageUrl = `https://picsum.photos/seed/${blog.id}/800/400`;
+  const imageUrl = `https://picsum.photos/seed/${blog.id || blog.slug}/800/400`;
 
   useEffect(() => {
-    // Calculate distance to now only after mounting on the client
-    setFormattedDate(formatDistanceToNow(new Date(blog.createdAt)));
+    if (blog.createdAt) {
+      try {
+        setFormattedDate(formatDistanceToNow(new Date(blog.createdAt)));
+      } catch (e) {
+        setFormattedDate('recently');
+      }
+    }
   }, [blog.createdAt]);
+
+  const authorName = typeof blog.author === 'object' ? blog.author.name : blog.author;
 
   return (
     <Link href={`/blog/${blog.slug}`}>
@@ -32,7 +38,7 @@ export function BlogCard({ blog }: { blog: Blog }) {
           />
           <div className="absolute top-4 right-4">
             <Badge className="bg-background/80 backdrop-blur text-foreground border-none">
-              {blog.author.name}
+              {authorName || 'Anonymous'}
             </Badge>
           </div>
         </div>
@@ -42,7 +48,7 @@ export function BlogCard({ blog }: { blog: Blog }) {
             {blog.title}
           </h3>
           <p className="text-muted-foreground text-sm line-clamp-2 leading-relaxed">
-            {blog.summary || blog.content.substring(0, 150) + '...'}
+            {blog.summary || (blog.content ? blog.content.substring(0, 150) + '...' : '')}
           </p>
         </CardHeader>
 
@@ -50,11 +56,11 @@ export function BlogCard({ blog }: { blog: Blog }) {
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5">
               <Heart className="w-4 h-4 text-destructive" />
-              {blog._count?.likes || 0}
+              {blog.likeCount || 0}
             </span>
             <span className="flex items-center gap-1.5">
               <MessageSquare className="w-4 h-4" />
-              {blog._count?.comments || 0}
+              {blog.commentCount || 0}
             </span>
           </div>
           <div className="flex items-center gap-1.5">

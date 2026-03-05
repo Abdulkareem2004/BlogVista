@@ -1,10 +1,11 @@
+
 'use client';
 
 import { collection, query, orderBy } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { BlogCard } from '@/components/blog/BlogCard';
 import { Input } from '@/components/ui/input';
-import { Search, Loader2, Newspaper } from 'lucide-react';
+import { Search, Loader2, Newspaper, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
 export default function FeedPage() {
@@ -18,7 +19,7 @@ export default function FeedPage() {
   const { data: blogs, isLoading } = useCollection(blogsQuery);
 
   const filteredBlogs = blogs?.filter(blog => 
-    blog.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    blog.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     blog.summary?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -32,7 +33,10 @@ export default function FeedPage() {
             </div>
             <div>
               <h1 className="text-4xl font-headline font-bold">Community Feed</h1>
-              <p className="text-muted-foreground">Discover stories from creators around the world.</p>
+              <p className="text-muted-foreground flex items-center gap-1.5 mt-1">
+                <Sparkles className="w-3.5 h-3.5 text-accent" />
+                Discover expert perspectives on AI, JS, and Cloud.
+              </p>
             </div>
           </div>
           <div className="relative w-full md:w-72">
@@ -51,15 +55,15 @@ export default function FeedPage() {
             <Loader2 className="w-10 h-10 animate-spin text-primary opacity-50" />
           </div>
         ) : filteredBlogs && filteredBlogs.length > 0 ? (
-          <div className="grid gap-8">
+          <div className="grid gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
             {filteredBlogs.map((blog) => (
-              <BlogCard key={blog.id} blog={blog as any} />
+              <BlogCard key={blog.id} blog={blog} />
             ))}
           </div>
         ) : (
           <div className="text-center py-24 bg-card/50 rounded-3xl border-2 border-dashed border-muted">
             <h3 className="text-2xl font-bold font-headline mb-2 text-muted-foreground">No stories found</h3>
-            <p className="text-muted-foreground max-w-sm mx-auto">Try a different search term or check back later for new updates.</p>
+            <p className="text-muted-foreground max-w-sm mx-auto">Try a different search term or check back later for new updates from our writers.</p>
           </div>
         )}
       </div>
