@@ -6,7 +6,7 @@ import { use, useEffect, useState } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Heart, MessageSquare, Share2, ArrowLeft, Loader2, Calendar, Clock } from 'lucide-react';
+import { Heart, MessageSquare, Share2, ArrowLeft, Loader2, Calendar, Clock, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { notFound } from 'next/navigation';
@@ -25,11 +25,16 @@ export default function BlogDetailPage({ params }: { params: Promise<{ slug: str
 
   useEffect(() => {
     if (blog?.createdAt) {
-      setPublishDate(format(new Date(blog.createdAt), 'MMMM d, yyyy'));
+      try {
+        setPublishDate(format(new Date(blog.createdAt), 'MMMM d, yyyy'));
+      } catch (e) {
+        setPublishDate('Recently');
+      }
     }
   }, [blog?.createdAt]);
 
-  if (isLoading) {
+  // Show loader while initial fetch is happening
+  if (isLoading || blogs === null) {
     return (
       <div className="container mx-auto px-4 py-32 flex justify-center">
         <Loader2 className="w-10 h-10 animate-spin text-primary opacity-50" />
@@ -37,6 +42,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ slug: str
     );
   }
 
+  // If loading is done and we still have no data
   if (!blog) {
     notFound();
   }
