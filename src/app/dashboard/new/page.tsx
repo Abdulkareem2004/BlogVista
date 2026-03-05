@@ -1,39 +1,99 @@
-
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { createBlog } from '@/lib/actions/blog';
-import { ArrowLeft, Send, Sparkles } from 'lucide-react';
+import { useUser, useFirestore } from '@/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { ArrowLeft, Send, Sparkles, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { generateBlogSummary } from '@/ai/flows/generate-blog-summary';
+import { toast } from '@/hooks/use-toast';
 
 export default function NewBlogPage() {
   const router = useRouter();
+  const { user, isUserLoading } = useUser();
+  const db = useFirestore();
   const [isPending, setIsPending] = useState(false);
   const [isPublished, setIsPublished] = useState(false);
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isUserLoading, router]);
+
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setIsPending(true);
+    if (!user) return;
     
-    const formData = new FormData(event.currentTarget);
-    formData.append('isPublished', String(isPublished));
-    formData.append('userId', 'u1'); // Simulated current user
+    setIsPending(true);
+    const slug = title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+    const blogId = Math.random().toString(36).substr(2, 9);
+    
+    let summary = '';
+    if (isPublished) {
+      try {
+        const res = await generateBlogSummary({ content });
+        summary = res.summary;
+      } catch (e) {
+        console.warn("AI summary failed", e);
+      }
+    }
+
+    const blogData = {
+      id: blogId,
+      userId: user.uid,
+      title,
+      slug,
+      content,
+      summary,
+      isPublished,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
 
     try {
-      await createBlog(formData, 'u1');
+      // Save to private collection
+      await setDoc(doc(db, 'users', user.uid, 'blogs', blogId), blogData);
+      
+      // If published, sync to public collection
+      if (isPublished) {
+        await setDoc(doc(db, 'public_blogs', blogId), {
+          ...blogData,
+          author: {
+            id: user.uid,
+            name: user.displayName || 'Author',
+            email: user.email,
+          }
+        });
+      }
+      
       router.push('/dashboard');
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Save failed',
+        description: error.message || 'Could not save your blog post.',
+      });
     } finally {
       setIsPending(false);
     }
+  }
+
+  if (isUserLoading || !user) {
+    return (
+      <div className="container mx-auto px-4 py-20 flex justify-center">
+        <Loader2 className="w-10 h-10 animate-spin text-primary opacity-50" />
+      </div>
+    );
   }
 
   return (
@@ -43,7 +103,7 @@ export default function NewBlogPage() {
           <ArrowLeft className="w-4 h-4" /> Back to Dashboard
         </Link>
 
-        <Card className="border-none shadow-xl bg-card/50">
+        <Card className="border-none shadow-xl bg-card/50 backdrop-blur-sm">
           <CardHeader className="pb-4">
             <CardTitle className="text-3xl font-headline font-bold">New Story</CardTitle>
           </CardHeader>
@@ -53,10 +113,11 @@ export default function NewBlogPage() {
                 <Label htmlFor="title">Title</Label>
                 <Input 
                   id="title" 
-                  name="title" 
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
                   placeholder="Enter a catchy title..." 
                   required 
-                  className="text-lg h-12 bg-background"
+                  className="text-lg h-12 bg-background border-none shadow-sm"
                 />
               </div>
 
@@ -64,16 +125,17 @@ export default function NewBlogPage() {
                 <Label htmlFor="content">Content</Label>
                 <Textarea 
                   id="content" 
-                  name="content" 
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
                   placeholder="Tell your story..." 
                   required 
-                  className="min-h-[400px] text-lg leading-relaxed bg-background resize-none p-6"
+                  className="min-h-[400px] text-lg leading-relaxed bg-background resize-none p-6 border-none shadow-sm"
                 />
               </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-between p-6 bg-accent/5 rounded-2xl border border-accent/20 gap-4">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
+                <div className="space-y-0.5 text-center sm:text-left">
+                  <div className="flex items-center gap-2 justify-center sm:justify-start">
                     <Label htmlFor="isPublished" className="text-base cursor-pointer">Publish immediately</Label>
                     <Sparkles className="w-4 h-4 text-primary" />
                   </div>
@@ -87,8 +149,8 @@ export default function NewBlogPage() {
               </div>
 
               <div className="flex justify-end pt-4">
-                <Button type="submit" size="lg" disabled={isPending} className="px-10 h-12 gap-2">
-                  {isPending ? 'Publishing...' : <><Send className="w-4 h-4" /> Publish Story</>}
+                <Button type="submit" size="lg" disabled={isPending} className="px-10 h-12 gap-2 rounded-full">
+                  {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4" /> Publish Story</>}
                 </Button>
               </div>
             </form>

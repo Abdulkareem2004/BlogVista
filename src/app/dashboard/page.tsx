@@ -1,14 +1,41 @@
+'use client';
 
-import { db } from '@/lib/db';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, orderBy } from 'firebase/firestore';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit2, Trash2, Eye } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { format } from 'date-fns';
 
-export default async function DashboardPage() {
-  const allBlogs = await db.blogs.findMany();
-  const userBlogs = allBlogs.filter(b => b.userId === 'u1'); // Simulated user 'u1'
+export default function DashboardPage() {
+  const { user, isUserLoading } = useUser();
+  const db = useFirestore();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isUserLoading, router]);
+
+  const userBlogsQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    return query(collection(db, 'users', user.uid, 'blogs'), orderBy('updatedAt', 'desc'));
+  }, [db, user]);
+
+  const { data: userBlogs, isLoading: isBlogsLoading } = useCollection(userBlogsQuery);
+
+  if (isUserLoading || !user) {
+    return (
+      <div className="container mx-auto px-4 py-20 flex justify-center">
+        <Loader2 className="w-10 h-10 animate-spin text-primary opacity-50" />
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -19,16 +46,20 @@ export default async function DashboardPage() {
             <p className="text-muted-foreground">Manage your articles and view analytics.</p>
           </div>
           <Link href="/dashboard/new">
-            <Button className="h-12 px-6 gap-2">
+            <Button className="h-12 px-6 gap-2 rounded-full">
               <Plus className="w-5 h-5" /> New Story
             </Button>
           </Link>
         </header>
 
         <div className="grid gap-4">
-          {userBlogs.length > 0 ? (
+          {isBlogsLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="w-8 h-8 animate-spin text-primary opacity-30" />
+            </div>
+          ) : userBlogs && userBlogs.length > 0 ? (
             userBlogs.map((blog) => (
-              <Card key={blog.id} className="p-6 flex flex-col md:flex-row items-center justify-between gap-6 hover:shadow-md transition-shadow">
+              <Card key={blog.id} className="p-6 flex flex-col md:flex-row items-center justify-between gap-6 hover:shadow-md transition-shadow bg-card/50 border-none shadow-sm">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-2">
                     {blog.isPublished ? (
@@ -36,7 +67,7 @@ export default async function DashboardPage() {
                     ) : (
                       <Badge variant="outline">Draft</Badge>
                     )}
-                    <span className="text-xs text-muted-foreground">Last updated {new Date(blog.updatedAt).toLocaleDateString()}</span>
+                    <span className="text-xs text-muted-foreground">Last updated {format(new Date(blog.updatedAt), 'MMM d, yyyy')}</span>
                   </div>
                   <h3 className="text-xl font-bold font-headline truncate mb-1">{blog.title}</h3>
                   <p className="text-muted-foreground text-sm line-clamp-1">{blog.summary || blog.content}</p>
@@ -61,7 +92,7 @@ export default async function DashboardPage() {
             <div className="text-center py-20 bg-card rounded-3xl border border-dashed">
               <p className="text-muted-foreground mb-6">You haven't written any stories yet.</p>
               <Link href="/dashboard/new">
-                <Button variant="outline" className="gap-2">
+                <Button variant="outline" className="gap-2 rounded-full">
                   <Plus className="w-4 h-4" /> Create your first blog
                 </Button>
               </Link>

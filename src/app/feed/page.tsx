@@ -1,12 +1,26 @@
+'use client';
 
-import { db } from '@/lib/db';
+import { collection, query, orderBy } from 'firebase/firestore';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { BlogCard } from '@/components/blog/BlogCard';
 import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 
-export default async function FeedPage() {
-  const blogs = await db.blogs.findMany();
-  const publishedBlogs = blogs.filter(b => b.isPublished);
+export default function FeedPage() {
+  const db = useFirestore();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const blogsQuery = useMemoFirebase(() => {
+    return query(collection(db, 'public_blogs'), orderBy('createdAt', 'desc'));
+  }, [db]);
+
+  const { data: blogs, isLoading } = useCollection(blogsQuery);
+
+  const filteredBlogs = blogs?.filter(blog => 
+    blog.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    blog.summary?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -21,20 +35,26 @@ export default async function FeedPage() {
             <Input 
               placeholder="Search stories..." 
               className="pl-10 bg-card border-none shadow-sm h-11"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
         </header>
 
-        {publishedBlogs.length > 0 ? (
+        {isLoading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="w-10 h-10 animate-spin text-primary opacity-50" />
+          </div>
+        ) : filteredBlogs && filteredBlogs.length > 0 ? (
           <div className="grid gap-8">
-            {publishedBlogs.map((blog) => (
-              <BlogCard key={blog.id} blog={blog} />
+            {filteredBlogs.map((blog) => (
+              <BlogCard key={blog.id} blog={blog as any} />
             ))}
           </div>
         ) : (
           <div className="text-center py-20 bg-card rounded-3xl border border-dashed">
-            <h3 className="text-xl font-bold font-headline mb-2">No stories yet</h3>
-            <p className="text-muted-foreground">Check back soon for new content.</p>
+            <h3 className="text-xl font-bold font-headline mb-2">No stories found</h3>
+            <p className="text-muted-foreground">Try adjusting your search or check back later.</p>
           </div>
         )}
       </div>

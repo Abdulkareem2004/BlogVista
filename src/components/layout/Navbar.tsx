@@ -1,20 +1,28 @@
-
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Newspaper, LayoutDashboard, LogIn, PenSquare } from 'lucide-react';
+import { Newspaper, LayoutDashboard, LogIn, PenSquare, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useUser, useAuth } from '@/firebase';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export function Navbar() {
   const pathname = usePathname();
-  const isLoggedIn = true; // Simulated auth state
+  const router = useRouter();
+  const { user, isUserLoading } = useUser();
+  const auth = useAuth();
 
   const navItems = [
     { label: 'Feed', href: '/feed', icon: Newspaper },
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, authRequired: true },
   ];
+
+  const handleLogout = async () => {
+    await auth.signOut();
+    router.push('/');
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md">
@@ -30,7 +38,7 @@ export function Navbar() {
 
         <nav className="flex items-center gap-1 sm:gap-4">
           {navItems.map((item) => (
-            (!item.authRequired || isLoggedIn) && (
+            (!item.authRequired || user) && (
               <Link key={item.href} href={item.href}>
                 <Button 
                   variant="ghost" 
@@ -48,21 +56,27 @@ export function Navbar() {
 
           <div className="w-px h-6 bg-border mx-2" />
 
-          {isLoggedIn ? (
-            <div className="flex items-center gap-2">
+          {isUserLoading ? (
+            <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
+          ) : user ? (
+            <div className="flex items-center gap-2 sm:gap-4">
               <Link href="/dashboard/new">
-                <Button className="gap-2 bg-primary hover:bg-primary/90">
+                <Button className="gap-2 bg-primary hover:bg-primary/90 hidden sm:flex">
                   <PenSquare className="w-4 h-4" />
-                  <span className="hidden sm:inline">Write</span>
+                  Write
                 </Button>
               </Link>
-              <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-xs font-bold border">
-                AR
-              </div>
+              <Avatar className="h-8 w-8 border">
+                <AvatarImage src={`https://picsum.photos/seed/${user.uid}/100/100`} />
+                <AvatarFallback>{user.displayName?.charAt(0) || user.email?.charAt(0)}</AvatarFallback>
+              </Avatar>
+              <Button variant="ghost" size="icon" onClick={handleLogout} className="text-muted-foreground hover:text-destructive">
+                <LogOut className="w-4 h-4" />
+              </Button>
             </div>
           ) : (
             <Link href="/login">
-              <Button variant="outline" className="gap-2">
+              <Button variant="outline" className="gap-2 rounded-full px-6">
                 <LogIn className="w-4 h-4" />
                 Login
               </Button>
