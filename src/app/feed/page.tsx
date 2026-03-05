@@ -1,7 +1,7 @@
 'use client';
 
 import { collection, query, orderBy, doc, setDoc } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { BlogCard } from '@/components/blog/BlogCard';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { toast } from '@/hooks/use-toast';
 
 export default function FeedPage() {
   const db = useFirestore();
+  const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSeeding, setIsSeeding] = useState(false);
 
@@ -26,31 +27,52 @@ export default function FeedPage() {
     blog.summary?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  async function handleSeedData() {
-    setIsSeeding(true);
-    try {
-      for (const blog of SAMPLE_BLOGS) {
-        const blogId = Math.random().toString(36).substr(2, 9);
-        await setDoc(doc(db, 'public_blogs', blogId), {
-          ...blog,
-          id: blogId,
-          userId: 'system',
-          updatedAt: blog.createdAt,
-        });
-      }
-      toast({
-        title: "Feed Seeded!",
-        description: "Sample blog posts have been added to the public feed.",
-      });
-    } catch (e: any) {
+  function handleSeedData() {
+    if (!user) {
       toast({
         variant: "destructive",
-        title: "Seeding failed",
-        description: e.message,
+        title: "Authentication required",
+        description: "Please sign in to seed the feed.",
       });
-    } finally {
-      setIsSeeding(false);
+      return;
     }
+
+    setIsSeeding(true);
+    
+    // Iterate through sample blogs and initiate non-blocking writes
+    SAMPLE_BLOGS.forEach((blog) => {
+      const blogId = Math.random().toString(36).substr(2, 9);
+      const docRef = doc(db, 'public_blogs', blogId);
+      const blogData = {
+        ...blog,
+        id: blogId,
+        userId: user.uid, // Use current user UID to satisfy security rules
+        updatedAt: blog.createdAt,
+        author: {
+          id: user.uid,
+          name: user.displayName || 'Demo Writer',
+          email: user.email,
+        }
+      };
+
+      setDoc(docRef, blogData)
+        .catch(async (error) => {
+          const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'create',
+            requestResourceData: blogData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
+    });
+
+    toast({
+      title: "Seeding initiated",
+      description: "Sample blog posts are being added to the public feed.",
+    });
+    
+    // We stop the spinner immediately as writes are non-blocking and optimistically updated
+    setIsSeeding(false);
   }
 
   return (
@@ -59,7 +81,7 @@ export default function FeedPage() {
         <header className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6 border-b pb-8 border-border/50">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-              <Newspaper className="w-6 h-6" />
+              < Newspaper className="w-6 h-6" />
             </div>
             <div>
               <h1 className="text-4xl font-headline font-bold">Community Feed</h1>

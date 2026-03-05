@@ -8,12 +8,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { useUser, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import { ArrowLeft, Send, Sparkles, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { generateBlogSummary } from '@/ai/flows/generate-blog-summary';
-import { toast } from '@/hooks/use-toast';
 
 export default function NewBlogPage() {
   const router = useRouter();
@@ -60,32 +59,41 @@ export default function NewBlogPage() {
       updatedAt: new Date().toISOString(),
     };
 
-    try {
-      // Save to private collection
-      await setDoc(doc(db, 'users', user.uid, 'blogs', blogId), blogData);
-      
-      // If published, sync to public collection
-      if (isPublished) {
-        await setDoc(doc(db, 'public_blogs', blogId), {
-          ...blogData,
-          author: {
-            id: user.uid,
-            name: user.displayName || 'Author',
-            email: user.email,
-          }
+    // Initiate non-blocking Firestore writes
+    const privateDocRef = doc(db, 'users', user.uid, 'blogs', blogId);
+    setDoc(privateDocRef, blogData)
+      .catch(async () => {
+        const permissionError = new FirestorePermissionError({
+          path: privateDocRef.path,
+          operation: 'create',
+          requestResourceData: blogData,
         });
-      }
-      
-      router.push('/dashboard');
-    } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Save failed',
-        description: error.message || 'Could not save your blog post.',
+        errorEmitter.emit('permission-error', permissionError);
       });
-    } finally {
-      setIsPending(false);
+    
+    if (isPublished) {
+      const publicBlogData = {
+        ...blogData,
+        author: {
+          id: user.uid,
+          name: user.displayName || 'Author',
+          email: user.email,
+        }
+      };
+      const publicDocRef = doc(db, 'public_blogs', blogId);
+      setDoc(publicDocRef, publicBlogData)
+        .catch(async () => {
+          const permissionError = new FirestorePermissionError({
+            path: publicDocRef.path,
+            operation: 'create',
+            requestResourceData: publicBlogData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
     }
+    
+    // Proceed immediately to dashboard leveraging local optimistic cache
+    router.push('/dashboard');
   }
 
   if (isUserLoading || !user) {
@@ -118,6 +126,7 @@ export default function NewBlogPage() {
                   placeholder="Enter a catchy title..." 
                   required 
                   className="text-lg h-12 bg-background border-none shadow-sm"
+                  suppressHydrationWarning
                 />
               </div>
 
@@ -149,7 +158,7 @@ export default function NewBlogPage() {
               </div>
 
               <div className="flex justify-end pt-4">
-                <Button type="submit" size="lg" disabled={isPending} className="px-10 h-12 gap-2 rounded-full">
+                <Button type="submit" size="lg" disabled={isPending} className="px-10 h-12 gap-2 rounded-full" suppressHydrationWarning>
                   {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4" /> Publish Story</>}
                 </Button>
               </div>
